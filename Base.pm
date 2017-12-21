@@ -21,6 +21,7 @@ use Modern::Perl;
 use DateTime;
 use Koha::Illrequestattribute;
 use Koha::Patrons;
+use LWP::UserAgent;
 use URI;
 use URI::Escape;
 use Catmandu::Importer::SRU;
@@ -322,20 +323,43 @@ sub confirm {
     foreach my $attr (@{$attributes->as_list}) {
         $value->{$attr->type} = $attr->value;
     };
+    my $target = $self->{targets}->{$value->{target}};
+
     # Submit request to backend...
 
-    # No-op for Dummy
+    # Authentication:
+    my $url = URI->new($target->{ILSDI});
+    my $key_pairs  = {
+        'service' => 'AuthenticatePatron',
+        'username' => $target->{user},
+        'password' => $target->{password},
+    };
+    $url->query_form( $key_pairs );
+    my $rsp = $self->_request( { method => 'GET', url => $url } );
+    # FIXME: Should do error handling!
+    my $doc = XML::LibXML->load_xml(string => $rsp);
+    my $query = "//AuthenticatePatron/id/text()";
+    my $id = ${$doc->findnodes($query)}[0]->data;
 
-    # ...parse response...
-    $attributes->find({ type => "status" })->value('On order')->store;
+    # Place request
+    $url = URI->new($target->{ILSDI});
+    $key_pairs  = {
+        'service' => 'HoldTitle',
+        'patron_id' => $id,
+        'bib_id' => $value->{bib_id},
+        'request_location' => '127.0.0.1',
+    };
+    $url->query_form( $key_pairs );
+    $rsp = $self->_request( { method => 'GET', url => $url } );
+    my $doc = XML::LibXML->load_xml(string => $rsp);
+    my $query = "//HoldTitle/pickup_location/text()";
+    die("Placing hold failed:", $rsp) if !${$doc->findnodes($query)}[0];
+
     my $request = $params->{request};
-    $request->cost("30 GBP");
-    $request->orderid($value->{id});
+    $request->cost("0 GBP");
+    $request->orderid($value->{bib_id});
     $request->status("REQ");
-    $request->accessurl("URL") if $value->{url};
     $request->store;
-    $value->{status} = "On order";
-    $value->{cost} = "30 GBP";
     # ...then return our result:
     return {
         error    => 0,
@@ -525,6 +549,33 @@ sub _fail {
         return 1 if (!$val or $val eq '');
     }
     return 0;
+}
+
+sub _request {
+    my ( $self, $param ) = @_;
+    my $method     = $param->{method};
+    my $url        = $param->{url};
+    my $content    = $param->{content};
+    my $additional = $param->{additional};
+
+    my $req = HTTP::Request->new( $method => $url );
+
+    # add content if specified
+    if ($content) {
+        $req->content($content);
+        $req->header('Content-Type' => 'text/xml');
+    }
+
+    my $ua = LWP::UserAgent->new;
+    my $res = $ua->request($req);
+    if ( $res->is_success ) {
+        return $res->content;
+    }
+    $self->{error} = {
+        status  => $res->status_line,
+        content => $res->content
+    };
+    return;
 }
 
 =head3 _validate_borrower
