@@ -49,7 +49,8 @@
 [% ELSIF whole.stage == "search_results" %]
   [% IF whole.value %]
     [% FOREACH target IN whole.value %]
-      <h2>Select a [% target.key %] request</h2>
+      [% name = target.key %]
+      <h2>Select a [% name %] request</h2>
       <table>
         <thead>
           <tr>
@@ -67,6 +68,7 @@
             <td>[% candidate.author %]</td>
             [% target = "/cgi-bin/koha/ill/ill-requests.pl"
             _ "?method=" _ whole.method
+            _ "&amp;target=" _ name
             _ "&amp;stage=" _ whole.stage
             _ "&amp;backend=" _ whole.backend
             _ "&amp;borrowernumber=" _ whole.borrowernumber

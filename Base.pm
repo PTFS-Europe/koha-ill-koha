@@ -149,6 +149,7 @@ sub metadata {
         ID     => $attrs->find({ type => 'bib_id' })->value,
         Title  => $attrs->find({ type => 'title' })->value,
         Author => $attrs->find({ type => 'author' })->value,
+        Target => $attrs->find({ type => 'target' })->value,
     }
 }
 
@@ -252,6 +253,7 @@ sub create {
             title => $other->{title},
             bib_id => $other->{bib_id},
             author => $other->{author},
+            target => $other->{target},
         };
         my $brwnum = $other->{borrowernumber};
         # ...Populate Illrequest
