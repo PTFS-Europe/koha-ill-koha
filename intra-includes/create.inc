@@ -47,41 +47,44 @@
     </form>
 
 [% ELSIF whole.stage == "search_results" %]
-    <h2>Select a dummy request</h2>
-    [% IF whole.value.candidates %]
-        <table>
-            <thead>
-                <tr>
-                    <th id="id">ID</th>
-                    <th id="title">Title</th>
-                    <th id="author">Author</th>
-                    <th id="select">Select?</th>
-                </tr>
-            </thead>
-            <tbody>
-                [% FOREACH candidate IN whole.value.candidates %]
-                    <tr>
-                        <td>[% candidate.id %]</td>
-                        <td>[% candidate.title %]</td>
-                        <td>[% candidate.author %]</td>
-                        [% target = "/cgi-bin/koha/ill/ill-requests.pl"
-                        _ "?method=" _ whole.method
-                        _ "&amp;stage=" _ whole.stage
-                        _ "&amp;backend=" _ whole.value.backend
-                        _ "&amp;borrowernumber=" _ whole.value.borrowernumber
-                        _ "&amp;branchcode=" _ whole.value.branchcode
-                        _ "&amp;medium=" _ whole.value.medium
-                        _ "&amp;id=" _ candidate.id %]
-                        <td>
-                            <a class="btn btn-sm btn-default" href="[% target %]">Request this item</a>
-                        </td>
-                    </tr>
-                [% END %]
-            </tbody>
-        </table>
-    [% ELSE %]
-        <p>We have no results</p>
+  [% IF whole.value %]
+    [% FOREACH target IN whole.value %]
+      <h2>Select a [% target.key %] request</h2>
+      <table>
+        <thead>
+          <tr>
+            <th id="id">ID</th>
+            <th id="title">Title</th>
+            <th id="author">Author</th>
+            <th id="select">Select?</th>
+          </tr>
+        </thead>
+        <tbody>
+          [% FOREACH candidate IN target.value %]
+          <tr>
+            <td>[% candidate.bib_id %]</td>
+            <td>[% candidate.title %]</td>
+            <td>[% candidate.author %]</td>
+            [% target = "/cgi-bin/koha/ill/ill-requests.pl"
+            _ "?method=" _ whole.method
+            _ "&amp;stage=" _ whole.stage
+            _ "&amp;backend=" _ whole.backend
+            _ "&amp;borrowernumber=" _ whole.borrowernumber
+            _ "&amp;branchcode=" _ whole.branchcode
+            _ "&amp;author=" _ candidate.author
+            _ "&amp;title=" _ candidate.title
+            _ "&amp;bib_id=" _ candidate.bib_id %]
+            <td>
+              <a class="btn btn-sm btn-default" href="[% target %]">Request this item</a>
+            </td>
+          </tr>
+          [% END %]
+        </tbody>
+      </table>
     [% END %]
+  [% ELSE %]
+    <p>We have no results</p>
+  [% END %]
 
 [% ELSE %]
     <p>We encountered an unexpected situation</p>

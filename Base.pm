@@ -21,12 +21,9 @@ use Modern::Perl;
 use DateTime;
 use Koha::Illrequestattribute;
 use Koha::Patrons;
-use LWP::UserAgent;
 use URI;
 use URI::Escape;
-use XML::LibXML;
-use MARC::Record;
-use MARC::File::XML;
+use Catmandu::Importer::SRU;
 
 =head1 NAME
 
@@ -114,7 +111,8 @@ sub new {
     # -> instantiate the backend
     my ( $class ) = @_;
     my $self = {
-        ua      => LWP::UserAgent->new,
+        # FIXME: This should be loaded from a configuration.  We should allow
+        # multiple targets.
         targets => {
             'Demo Koha Instance' => {
                 SRU => 'http://demo.koha-ptfs.eu:9998/biblios',
@@ -141,10 +139,9 @@ sub metadata {
     my ( $self, $request ) = @_;
     my $attrs = $request->illrequestattributes;
     return {
-        ID     => $attrs->find({ type => 'id' })->value,
+        ID     => $attrs->find({ type => 'bib_id' })->value,
         Title  => $attrs->find({ type => 'title' })->value,
         Author => $attrs->find({ type => 'author' })->value,
-        Status => $attrs->find({ type => 'status' })->value,
     }
 }
 
@@ -284,30 +281,20 @@ sub create {
         }
 
     } elsif ( $stage eq 'search_results' ) {
-        # We have a selection
-        my $id = $params->{other}->{id};
+        my $other = $params->{other};
 
-        # -> select from backend...
-        my $request_details = $self->_data_store($id);
-
-        # Establish borrower
-        my $brwnum;
-        if ( $params->{other}->{cardnumber} ) {
-            # OPAC request
-            my $brw = Koha::Patrons->find({
-                cardnumber => $params->{other}->{cardnumber}
-            });
-            $brwnum = $brw->borrowernumber;
-        } else {
-            $brwnum = $params->{other}->{borrowernumber};
-        }
+        my $request_details = {
+            title => $other->{title},
+            bib_id => $other->{bib_id},
+            author => $other->{author},
+        };
+        my $brwnum = $other->{borrowernumber};
         # ...Populate Illrequest
         my $request = $params->{request};
         $request->borrowernumber($brwnum);
-        $request->branchcode($params->{other}->{branchcode});
-        $request->medium($params->{other}->{medium});
+        $request->branchcode($other->{branchcode});
         $request->status('NEW');
-	$request->backend($params->{other}->{backend});
+	$request->backend($other->{backend});
         $request->placed(DateTime->now);
         $request->updated(DateTime->now);
         $request->store;
@@ -583,6 +570,7 @@ sub _search {
     my $brw = Koha::Patrons->find($borrowernumber);
     my $branch = $other->{branchcode};
     my $backend = $other->{backend};
+    # FIXME: We ignore opts currently
     my %opts = map { $_ => $other->{$_} }
         qw/ search max_results start_rec /;
     my $opts = \%opts;
@@ -592,92 +580,47 @@ sub _search {
 
     my $results = [];
 
-    my $args = {
-        version => '1.1',
-        operation => 'searchRetrieve',
-        query => $opts->{search},
-        startRecord => $opts->{start_rec},
-        maximumRecords => $opts->{max_results},
-        recordSchema => 'marcxml',
-    };
-    my $key_pairs  = [];
-    foreach my $k ( keys %{$args} ) {
-        push @{$key_pairs}, $k, $args->{$k};
-    }
-
     my $searches = {};
     foreach my $target ( keys %{$self->{targets}} ) {
-        my $url = URI->new($self->{targets}->{$target}->{SRU});
-        $url->query_form( $key_pairs );
-        my $req = HTTP::Request->new( 'GET' => $url );
-        $req->header('Content-Type' => 'text/xml');
-        my $res = $self->{ua}->request($req);
-        if ( $res->is_success ) {
-            $searches->{$target} = MARC::Record->new_from_xml( 'XML', $res->content);
-        } else {
-            die("Error requesting from target", $res->status_line, $res->content);
-        }
+        my $importer = Catmandu::Importer::SRU->new(
+            base => $self->{targets}->{$target}->{SRU},
+            query => $opts->{search},
+            recordSchema => 'marcxml',
+            parser => 'marcxml',
+        );
+        # use Data::Dump qw/dump/;
+        # die dump($importer->next);
+        my $fixer = Catmandu->fixer('
+marc_map(245, title);
+marc_map(100a, author);
+marc_map(999d, bib_id);
+retain(title, bib_id, author)');
+        $searches->{$target} = $fixer->fix($importer)->to_array;
     }
 
-    use Data::Dump qw/dump/;
-    die dump($searches);
-
     # Perform the search in the API
-    my $response = $self->_process($self->_api->search($query, $opts));
+    my $response = {
+        status => 200,
+        message => "",
+        error => 0,
+        value => $searches,
+    };
 
     # Augment Response with standard values
     $response->{method} = "create";
-    $response->{stage} = "search";
+    $response->{stage} = "search_results";
     $response->{borrowernumber} = $borrowernumber;
     $response->{cardnumber} = $brw->cardnumber;
     $response->{branchcode} = $branch;
     $response->{backend} = $backend;
-    $response->{query} = $query;
+    $response->{query} = $opts;
     $response->{params} = $params;
 
-    # Build user search string & paging query string
-    my $nav_qry = "?method=create&stage=search_cont&query="
-        . uri_escape($query);
-    $nav_qry .= "&borrowernumber=" . $borrowernumber;
-    $nav_qry .= "&branchcode=" . $branch;
-    $nav_qry .= "&backend=" . $backend;
-    my $userstring = "[keywords: " . $query . "]";
-    while ( my ($type, $value) = each %{$opts} ) {
-        $userstring .= "[" . join(": ", $type, $value) . "]";
-        $nav_qry .= "&" . join("=", $type, $value)
-            unless ( 'start_rec' eq $type );
+    my $count = 0;
+    foreach my $n ( values $searches ) {
+        $count += @{$n};
     }
-    $response->{userstring} = $userstring;
-
-    # Handle errors
-    if ( $response->{error} && $response->{status} eq 'search_fail' ) {
-        # Ignore 'search_fail' result: empty resultset
-        $response->{error} = 0
-    } elsif ( $response->{error} ) {
-        # Return on other error
-        return $response;
-    }
-
-    # Else populate response values.
-    my @return;
-    my $spec = $self->getSpec;
-    foreach my $datum ( @{$response->{value}->result->records} ) {
-	my $record = $self->_parseResponse($datum, $spec, {});
-        push (@return, $record);
-    }
-    $response->{value} = \@return;
-
-    # Finalise paging query string
-    my $result_count = @return;
-    my $current_pos  = $opts->{start_rec};
-    my $next_pos = $current_pos + $result_count;
-    my $next = $nav_qry . "&start_rec=" . $next_pos
-        if ( $result_count == $opts->{max_results} );
-    my $prev_pos = $current_pos - $result_count;
-    my $previous = $nav_qry . "&start_rec=" . $prev_pos
-        if ( $prev_pos >= 1 );
-    $response->{next} = $next;
-    $response->{previous} = $previous;
+    $response->{count} = $count;
 
     # Return search results
     return $response;
