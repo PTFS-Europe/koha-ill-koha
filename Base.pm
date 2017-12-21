@@ -125,6 +125,8 @@ sub new {
             'Demo Koha Instance' => {
                 SRU => 'http://demo.koha-ptfs.eu:9998/biblios',
                 ILSDI => 'https://demo.koha-ptfs.eu/cgi-bin/koha/ilsdi.pl',
+                user => 'alex_library',
+                password => 'zoom1JaeC1EiJie',
             },
         },
     };
