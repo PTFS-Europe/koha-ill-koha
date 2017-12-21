@@ -87,13 +87,20 @@ Each of the above methods should return a hashref of the following format:
         #          backend wants to supply to its INCLUDE.
     };
 
-=head2 On the Dummy backend
+=head2 On the Koha backend
 
-The Dummy backend is rather simple, but provides correctly formatted response
-values, that other backends can model themselves after.
+The Koha backend uses Koha's SRU server to perform searches against other
+instances, and it's ILS-DI API to 'confirm' ill requests.
 
-The code is not DRY -- primarily so that each method can be looked at in
-isolation rather than having to familiarise oneself with helper procedures.
+The backend has the notion of targets, each of which is a Koha instance
+definition consisting of {
+  $name => {
+    SRU => 'sru_base_uri',
+    ILSDI => 'ilsdi_base_uri',
+    user => 'remote_user_name',
+    password => 'remote_password',
+  }
+}.
 
 =head1 API
 
@@ -163,43 +170,6 @@ sub capabilities {
     return $capabilities->{$name};
 }
 
-=head3 _data_store
-
-  my $request = $self->_data_store($id);
-  my $requests = $self->_data_store;
-
-A mock of a data store.  When passed no parameters it returns all entries.
-When passed one it will return the entry matched by its id.
-
-=cut
-
-sub _data_store {
-    my $data = {
-        1234 => {
-            id     => 1234,
-            title  => "Ordering ILLs using Koha",
-            author => "A.N. Other",
-            status => "New",
-        },
-        5678 => {
-            id     => 5678,
-            title  => "Interlibrary loans in Koha",
-            author => "A.N. Other",
-            status => "New",
-        },
-    };
-    # ID search
-    my ( $self, $id ) = @_;
-    return $data->{$id} if $id;
-
-    # Full search
-    my @entries;
-    while ( my ( $k, $v ) = each %{$data} ) {
-        push @entries, $v;
-    }
-    return \@entries;
-}
-
 =head3 status_graph
 
 =cut
@@ -215,16 +185,11 @@ sub status_graph {
       other      => $other,
   });
 
-This is the initial creation of the request.  Generally this stage will be
-some form of search with the backend.
+This is the initial creation of the request.  We search our Koha targets using
+Catmandu's SRU library, and provide a choice from the results from all
+targets.
 
-By and large we will not have useful $requestdetails (borrowernumber,
-branchcode, status, etc.).
-
-$params is simply an additional slot for any further arbitrary values to pass
-to the backend.
-
-This is an example of a multi-stage method.
+We provide no paging and only rudimentary branch & borrower validation.
 
 =cut
 
@@ -399,30 +364,13 @@ Illrequest.  $other may be supplied using templates.
 sub renew {
     # -> request a currently borrowed ILL be renewed in the backend
     my ( $self, $params ) = @_;
-    # Turn Illrequestattributes into a plain hashref
-    my $value = {};
-    my $attributes = $params->{request}->illrequestattributes;
-    foreach my $attr (@{$attributes->as_list}) {
-        $value->{$attr->type} = $attr->value;
-    };
-    # Submit request to backend, parse response...
-    my ( $error, $status, $message ) = ( 0, '', '' );
-    if ( !$value->{status} || $value->{status} eq 'On order' ) {
-        $error = 1;
-        $status = 'not_renewed';
-        $message = 'Order not yet delivered.';
-    } else {
-        $value->{status} = "Renewed";
-    }
-    # ...then return our result:
     return {
-        error   => $error,
-        status  => $status,
-        message => $message,
+        error   => 1,
+        status  => 404,
+        message => "Not Implemented",
         method  => 'renew',
-        stage   => 'commit',
-        value   => $value,
-        next    => 'illview',
+        stage   => 'fake',
+        value   => {},
     };
 }
 
@@ -443,33 +391,13 @@ Illrequest.  $other may be supplied using templates.
 sub cancel {
     # -> request an already 'confirm'ed ILL order be cancelled
     my ( $self, $params ) = @_;
-    # Turn Illrequestattributes into a plain hashref
-    my $value = {};
-    my $attributes = $params->{request}->illrequestattributes;
-    foreach my $attr (@{$attributes->as_list}) {
-        $value->{$attr->type} = $attr->value;
-    };
-    # Submit request to backend, parse response...
-    my ( $error, $status, $message ) = (0, '', '');
-    if ( !$value->{status} ) {
-        ( $error, $status, $message ) = (
-            1, 'unknown_request', 'Cannot cancel an unknown request.'
-        );
-    } else {
-        $attributes->find({ type => "status" })->value('Reverted')->store;
-        $params->{request}->status("REQREV");
-        $params->{request}->cost(undef);
-        $params->{request}->orderid(undef);
-        $params->{request}->store;
-    }
     return {
-        error   => $error,
-        status  => $status,
-        message => $message,
+        error   => 1,
+        status  => 404,
+        message => "Not Implemented",
         method  => 'cancel',
-        stage   => 'commit',
-        value   => $value,
-        next    => 'illview',
+        stage   => 'fake',
+        value   => {},
     };
 }
 
@@ -490,55 +418,14 @@ Illrequest.  $other may be supplied using templates.
 sub status {
     # -> request the current status of a confirmed ILL order
     my ( $self, $params ) = @_;
-    my $value = {};
-    my $stage = $params->{other}->{stage};
-    my ( $error, $status, $message ) = (0, '', '');
-    if ( !$stage || $stage eq 'init' ) {
-        # Generate status result
-        # Turn Illrequestattributes into a plain hashref
-        my $attributes = $params->{request}->illrequestattributes;
-        foreach my $attr (@{$attributes->as_list}) {
-            $value->{$attr->type} = $attr->value;
-        }
-        ;
-        # Submit request to backend, parse response...
-        if ( !$value->{status} ) {
-            ( $error, $status, $message ) = (
-                1, 'unknown_request', 'Cannot query status of an unknown request.'
-            );
-        }
-        return {
-            error   => $error,
-            status  => $status,
-            message => $message,
-            method  => 'status',
-            stage   => 'status',
-            value   => $value,
-        };
-
-    } elsif ( $stage eq 'status') {
-        # No more to do for method.  Return to illlist.
-        return {
-            error   => $error,
-            status  => $status,
-            message => $message,
-            method  => 'status',
-            stage   => 'commit',
-            next    => 'illlist',
-            value   => {},
-        };
-
-    } else {
-        # Invalid stage, return error.
-        return {
-            error   => 1,
-            status  => 'unknown_stage',
-            message => '',
-            method  => 'create',
-            stage   => $params->{stage},
-            value   => {},
-        };
-    }
+    return {
+        error   => 1,
+        status  => 404,
+        message => "Not Implemented",
+        method  => 'status',
+        stage   => 'fake',
+        value   => {},
+    };
 }
 
 =head3 search
