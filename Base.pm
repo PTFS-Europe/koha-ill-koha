@@ -1,6 +1,6 @@
 package Koha::Illbackends::Koha::Base;
 
-# Copyright PTFS Europe 2014
+# Copyright 2017 Alex Sassmannshausen <alex.sassmannshausen@gmail.com>
 #
 # This file is part of Koha.
 #
