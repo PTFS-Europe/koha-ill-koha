@@ -339,12 +339,27 @@ sub confirm {
     };
     $url->query_form( $key_pairs );
     my $rsp = $self->_request( { method => 'GET', url => $url } );
-    # FIXME: Should do error handling!
     my $doc = XML::LibXML->load_xml(string => $rsp);
-    my $query = "//AuthenticatePatron/id/text()";
-    my $id = ${$doc->findnodes($query)}[0]->data;
 
-    # Place request
+    # Catch AuthenticatePatron Errors
+    my $code_query = "//AuthenticatePatron/code/text()";
+    my $code = $doc->findnodes($code_query) ? ${$doc->findnodes($code_query)}[0]->data : undef;
+    return {
+        error   => 1,
+        status  => '',
+        message => "Service Authentication Error: $code",
+        method  => 'confirm',
+        stage   => 'confirm',
+        next    => '',
+        value   => $value
+      }
+      if defined($code);
+
+    # Stash the authenticated service user id
+    my $id_query = "//AuthenticatePatron/id/text()";
+    my $id = ${$doc->findnodes($id_query)}[0]->data;
+
+    # Place the request
     $url = URI->new($target->{ILSDI});
     $key_pairs  = {
         'service' => 'HoldTitle',
