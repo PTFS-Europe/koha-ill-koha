@@ -25,14 +25,15 @@ use LWP::UserAgent;
 use URI;
 use URI::Escape;
 use Catmandu::Importer::SRU;
+use Try::Tiny;
 
 =head1 NAME
 
-Koha::Illrequest::Backend::Dummy - Koha ILL Backend: Dummy
+Koha::Illrequest::Backend::Koha - Koha to Koha ILL Backend
 
 =head1 SYNOPSIS
 
-Koha ILL implementation for the "Dummy" backend.
+Koha ILL implementation for the SRU + ILS-DI backend
 
 =head1 DESCRIPTION
 
@@ -111,7 +112,7 @@ definition consisting of {
 
 =head3 new
 
-  my $backend = Koha::Illrequest::Backend::Dummy->new;
+  my $backend = Koha::Illrequest::Backend::Koha->new;
 
 =cut
 
@@ -353,8 +354,8 @@ sub confirm {
     };
     $url->query_form( $key_pairs );
     $rsp = $self->_request( { method => 'GET', url => $url } );
-    my $doc = XML::LibXML->load_xml(string => $rsp);
-    my $query = "//HoldTitle/pickup_location/text()";
+    $doc = XML::LibXML->load_xml(string => $rsp);
+    $query = "//HoldTitle/pickup_location/text()";
     die("Placing hold failed:", $rsp) if !${$doc->findnodes($query)}[0];
 
     my $request = $params->{request};
@@ -497,20 +498,24 @@ sub _search {
 
     my $searches = {};
     foreach my $target ( keys %{$self->{targets}} ) {
-        my $importer = Catmandu::Importer::SRU->new(
-            base => $self->{targets}->{$target}->{SRU},
-            query => $opts->{search},
-            recordSchema => 'marcxml',
-            parser => 'marcxml',
-        );
-        # use Data::Dump qw/dump/;
-        # die dump($importer->next);
-        my $fixer = Catmandu->fixer('
+        try {
+            my $importer = Catmandu::Importer::SRU->new(
+                base => $self->{targets}->{$target}->{SRU},
+                query => $opts->{search},
+                recordSchema => 'marcxml',
+                parser => 'marcxml',
+            );
+            # use Data::Dump qw/dump/;
+            # die dump($importer->next);
+            my $fixer = Catmandu->fixer('
 marc_map(245, title);
 marc_map(100a, author);
 marc_map(999d, bib_id);
 retain(title, bib_id, author)');
-        $searches->{$target} = $fixer->fix($importer)->to_array;
+            $searches->{$target} = $fixer->fix($importer)->to_array;
+        } catch {
+            $searches->{$target} = $_;
+        };
     }
 
     # Perform the search in the API
@@ -532,8 +537,8 @@ retain(title, bib_id, author)');
     $response->{params} = $params;
 
     my $count = 0;
-    foreach my $n ( values $searches ) {
-        $count += @{$n};
+    foreach my $n ( values %{$searches} ) {
+        $count += @{$n} if (ref $n eq 'ARRAY');
     }
     $response->{count} = $count;
 

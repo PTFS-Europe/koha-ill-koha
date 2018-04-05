@@ -50,39 +50,44 @@
   [% IF whole.value %]
     [% FOREACH target IN whole.value %]
       [% name = target.key %]
-      <h2>Select a [% name %] request</h2>
-      <table>
-        <thead>
-          <tr>
-            <th id="id">ID</th>
-            <th id="title">Title</th>
-            <th id="author">Author</th>
-            <th id="select">Select?</th>
-          </tr>
-        </thead>
-        <tbody>
-          [% FOREACH candidate IN target.value %]
-          <tr>
-            <td>[% candidate.bib_id %]</td>
-            <td>[% candidate.title %]</td>
-            <td>[% candidate.author %]</td>
-            [% target = "/cgi-bin/koha/ill/ill-requests.pl"
-            _ "?method=" _ whole.method
-            _ "&amp;target=" _ name
-            _ "&amp;stage=" _ whole.stage
-            _ "&amp;backend=" _ whole.backend
-            _ "&amp;borrowernumber=" _ whole.borrowernumber
-            _ "&amp;branchcode=" _ whole.branchcode
-            _ "&amp;author=" _ candidate.author
-            _ "&amp;title=" _ candidate.title
-            _ "&amp;bib_id=" _ candidate.bib_id %]
-            <td>
-              <a class="btn btn-sm btn-default" href="[% target %]">Request this item</a>
-            </td>
-          </tr>
-          [% END %]
-        </tbody>
-      </table>
+      [% IF target.value.0.defined %]
+        <h2>Select a [% name %] request</h2>
+        <table>
+          <thead>
+            <tr>
+              <th id="id">ID</th>
+              <th id="title">Title</th>
+              <th id="author">Author</th>
+              <th id="select">Select?</th>
+            </tr>
+          </thead>
+          <tbody>
+            [% FOREACH candidate IN target.value %]
+            <tr>
+              <td>[% candidate.bib_id %]</td>
+              <td>[% candidate.title %]</td>
+              <td>[% candidate.author %]</td>
+              [% target = "/cgi-bin/koha/ill/ill-requests.pl"
+              _ "?method=" _ whole.method
+              _ "&amp;target=" _ name
+              _ "&amp;stage=" _ whole.stage
+              _ "&amp;backend=" _ whole.backend
+              _ "&amp;borrowernumber=" _ whole.borrowernumber
+              _ "&amp;branchcode=" _ whole.branchcode
+              _ "&amp;author=" _ candidate.author
+              _ "&amp;title=" _ candidate.title
+              _ "&amp;bib_id=" _ candidate.bib_id %]
+              <td>
+                <a class="btn btn-sm btn-default" href="[% target %]">Request this item</a>
+              </td>
+            </tr>
+            [% END %]
+          </tbody>
+        </table>
+      [% ELSE %]
+        <h2>Search failed for [% name %]</h2>
+        <p>[% target.value %]</p>
+      [% END %]
     [% END %]
   [% ELSE %]
     <p>We have no results</p>
