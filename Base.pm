@@ -370,8 +370,24 @@ sub confirm {
     $url->query_form( $key_pairs );
     $rsp = $self->_request( { method => 'GET', url => $url } );
     $doc = XML::LibXML->load_xml(string => $rsp);
-    $query = "//HoldTitle/pickup_location/text()";
-    die("Placing hold failed:", $rsp) if !${$doc->findnodes($query)}[0];
+    
+    # Catch HoldTitle Errors
+    $code_query = "//HoldTitle/code/text()";
+    $code = $doc->findnodes($code_query) ? ${$doc->findnodes($code_query)}[0]->data : undef;
+    return {
+        error   => 1,
+        status  => '',
+        message => "Service Request Error: $code",
+        method  => 'confirm',
+        stage   => 'confirm',
+        next    => '',
+        value   => $value
+      }
+      if defined($code);
+
+    # Stash the hold request response
+    my $pickup_query = "//HoldTitle/pickup_location/text()";
+    die("Placing hold failed:", $rsp) if !${$doc->findnodes($pickup_query)}[0];
 
     my $request = $params->{request};
     $request->cost("0 GBP");
