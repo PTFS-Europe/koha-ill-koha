@@ -406,6 +406,22 @@ sub confirm {
     };
     $url->query_form($key_pairs);
     my $rsp = $self->_request( { method => 'GET', url => $url } );
+
+    # Catch LWP Errors
+    if ( $self->{error} ) {
+        return {
+            error   => 1,
+            status  => '',
+            message => "ILDI Service Error: Request - $url, "
+              . "Status - $self->{error}->{status}, "
+              . "Content - $self->{error}->{content}, $url",
+            method => 'confirm',
+            stage  => 'confirm',
+            next   => '',
+            value  => $value
+        };
+    }
+
     my $doc = XML::LibXML->load_xml( string => $rsp );
 
     # Catch AuthenticatePatron Errors
@@ -439,6 +455,22 @@ sub confirm {
     };
     $url->query_form($key_pairs);
     $rsp = $self->_request( { method => 'GET', url => $url } );
+
+    # Catch LWP Errors
+    if ( $self->{error} ) {
+        return {
+            error   => 1,
+            status  => '',
+            message => "ILDI Service Error: Request - $url, "
+              . "Status - $self->{error}->{status}, "
+              . "Content - $self->{error}->{content}, $url",
+            method => 'confirm',
+            stage  => 'confirm',
+            next   => '',
+            value  => $value
+        };
+    }
+
     $doc = XML::LibXML->load_xml( string => $rsp );
 
     # Catch HoldTitle Errors
