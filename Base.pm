@@ -376,6 +376,142 @@ sub create {
     }
 }
 
+=head3 migrate
+
+Migrate a request into or out of this backend.
+
+=cut
+
+sub migrate {
+    my ( $self, $params ) = @_;
+    my $other = $params->{other};
+
+    my $stage = $other->{stage};
+    my $step  = $other->{step};
+
+    # Recieve a new request from another backend and suppliment it with
+    # anything we require speficifcally for this backend.
+    if ( !$stage || $stage eq 'immigrate' ) {
+
+        # Fetch original request details
+        my $original_request =
+          Koha::Illrequests->find( $other->{illrequest_id} );
+
+        # Initiate immigration search
+        if ( !$step || $step eq 'init' ) {
+
+            # Initiate search with details from last request
+            my $search = {
+                biblionumber => 0,    # required by C4::Breeding::Z3950Search
+                page => $other->{page} ? $other->{page} : 1,
+                id   => [
+                    map { $self->{targets}->{$_}->{ZID} }
+                      keys %{ $self->{targets} }
+                ],
+            };
+            my @recognised_attributes = (
+                qw/isbn issn title author dewey subject lccall controlnumber stdid srchany/
+            );
+            my $original_attributes =
+              $original_request->illrequestattributes->search(
+                { type => { '-in' => \@recognised_attributes } } );
+            my $search_attributes =
+              { map { $_->type => $_->value }
+                  ( $original_attributes->as_list ) };
+            $search = { %{$search}, %{$search_attributes} };
+
+            # Perform a search
+            my $results = $self->_search($search);
+
+            # Construct the response
+            my $response = {
+                status        => 200,
+                message       => "",
+                error         => 0,
+                value         => $results,
+                method        => 'migrate',
+                stage         => 'immigrate',
+                step          => 'search_results',
+                illrequest_id => $other->{illrequest_id},
+                backend       => $self->name,
+                query         => $search,
+                params        => $params
+            };
+            return $response;
+        }
+
+        # Import from search results
+        elsif ( $step eq 'search_results' ) {
+            my ( $biblionumber, $remote_id ) =
+              $self->_add_from_breeding( $other->{breedingid},
+                $self->{framework} );
+
+            my $new_request = $params->{request};
+            $new_request->borrowernumber( $original_request->borrowernumber );
+            $new_request->branchcode( $original_request->branchcode );
+            $new_request->status('NEW');
+            $new_request->backend( $self->name );
+            $new_request->placed( DateTime->now );
+            $new_request->updated( DateTime->now );
+            $new_request->biblio_id($biblionumber);
+            $new_request->store;
+
+            my $request_details = {
+                target => $other->{target},
+                bib_id => $remote_id,
+                title  => $other->{title},
+                author => $other->{author},
+            };
+            $request_details->{migrated_from} =
+              $original_request->illrequest_id;
+
+            while ( my ( $type, $value ) = each %{$request_details} ) {
+                Koha::Illrequestattribute->new(
+                    {
+                        illrequest_id => $new_request->illrequest_id,
+                        type          => $type,
+                        value         => $value,
+                    }
+                )->store;
+            }
+
+            return {
+                error   => 0,
+                status  => '',
+                message => '',
+                method  => 'migrate',
+                stage   => 'commit',
+                next    => 'emigrate',
+                value   => $params,
+            };
+        }
+    }
+
+    # Cleanup any outstanding work and close the request.
+    elsif ( $stage eq 'emigrate' ) {
+        my $request = $params->{request};
+
+        # Just cancel the original request now it's been migrated away
+        $request->status("REQREV");
+        $request->orderid(undef);
+        $request->store;
+
+        # Clean up the temporary bib record for the migrated request
+        #if ( my $biblio = $request->biblio ) {
+        #    DeleteBiblio( $biblio->biblionumber );
+        #}
+
+        return {
+            error   => 0,
+            status  => '',
+            message => '',
+            method  => 'migrate',
+            stage   => 'commit',
+            value   => $params,
+        };
+    }
+}
+
 =head3 confirm
 
   my $response = $backend->confirm({
@@ -608,155 +744,14 @@ sub status {
     };
 }
 
-=head3 migrate
-
-Migrate a request into or out of this backend.
-
-=cut
-
-sub migrate {
-    my ( $self, $params ) = @_;
-    my $other = $params->{other};
-
-    my $stage = $other->{stage};
-    my $step  = $other->{step};
-
-    # Recieve a new request from another backend and suppliment it with
-    # anything we require speficifcally for this backend.
-    if ( !$stage || $stage eq 'immigrate' ) {
-
-        # Fetch original request details
-        my $original_request =
-          Koha::Illrequests->find( $other->{illrequest_id} );
-
-        # Initiate immigration search
-        if ( !$step || $step eq 'init' ) {
-
-            # Initiate search with details from last request
-            my $search = {
-                biblionumber => 0,    # required by C4::Breeding::Z3950Search
-                page => $other->{page} ? $other->{page} : 1,
-                id   => [
-                    map { $self->{targets}->{$_}->{ZID} }
-                      keys %{ $self->{targets} }
-                ],
-            };
-            my @recognised_attributes = (
-                qw/isbn issn title author dewey subject lccall controlnumber stdid srchany/
-            );
-            my $original_attributes =
-              $original_request->illrequestattributes->search(
-                { type => { '-in' => \@recognised_attributes } } );
-            my $search_attributes =
-              { map { $_->type => $_->value }
-                  ( $original_attributes->as_list ) };
-            $search = { %{$search}, %{$search_attributes} };
-
-            # Perform a search
-            my $results = $self->_search($search);
-
-            # Construct the response
-            my $response = {
-                status        => 200,
-                message       => "",
-                error         => 0,
-                value         => $results,
-                method        => 'migrate',
-                stage         => 'immigrate',
-                step          => 'search_results',
-                illrequest_id => $other->{illrequest_id},
-                backend       => $self->name,
-                query         => $search,
-                params        => $params
-            };
-            return $response;
-        }
-
-        # Import from search results
-        elsif ( $step eq 'search_results' ) {
-            my ( $biblionumber, $remote_id ) =
-              $self->_add_from_breeding( $other->{breedingid},
-                $self->{framework} );
-
-            my $new_request = $params->{request};
-            $new_request->borrowernumber( $original_request->borrowernumber );
-            $new_request->branchcode( $original_request->branchcode );
-            $new_request->status('NEW');
-            $new_request->backend( $self->name );
-            $new_request->placed( DateTime->now );
-            $new_request->updated( DateTime->now );
-            $new_request->biblio_id($biblionumber);
-            $new_request->store;
-
-            my $request_details = {
-                target => $other->{target},
-                bib_id => $remote_id,
-                title  => $other->{title},
-                author => $other->{author},
-            };
-            $request_details->{migrated_from} =
-              $original_request->illrequest_id;
-
-            while ( my ( $type, $value ) = each %{$request_details} ) {
-                Koha::Illrequestattribute->new(
-                    {
-                        illrequest_id => $new_request->illrequest_id,
-                        type          => $type,
-                        value         => $value,
-                    }
-                )->store;
-            }
-
-            return {
-                error   => 0,
-                status  => '',
-                message => '',
-                method  => 'migrate',
-                stage   => 'commit',
-                next    => 'emigrate',
-                value   => $params,
-            };
-        }
-    }
-
-    # Cleanup any outstanding work and close the request.
-    elsif ( $stage eq 'emigrate' ) {
-        my $request = $params->{request};
-
-        # Just cancel the original request now it's been migrated away
-        $request->status("REQREV");
-        $request->orderid(undef);
-        $request->store;
-
-        return {
-            error   => 0,
-            status  => '',
-            message => '',
-            method  => 'migrate',
-            stage   => 'commit',
-            value   => $params,
-        };
-    }
-}
+#### Helpers
 
 =head3 _search
 
-my $results = $bldss->search($query, $opts);
+  my $response = $self->_search($query);
 
-Return an array of Record objects.
-
-The optional OPTS parameter specifies additional options to be passed to the
-API. For now the options we use in the ILL Module are:
- max_results -> SearchRequest.maxResults,
- start_rec   -> SearchRequest.start,
- isbn        -> SearchRequest.Advanced.isbn
- issn        -> SearchRequest.Advanced.issn
- title       -> SearchRequest.Advanced.title
- author      -> SearchRequest.Advanced.author
- type        -> SearchRequest.Advanced.type
- general     -> SearchRequest.Advanced.general
-
-We simply pass the options hashref straight to the backend.
+Given a search query hashref, perform a Z3950 search against the specified
+targets and return the results (and add the results to the reserviour).
 
 =cut
 
@@ -795,6 +790,15 @@ sub _fail {
     return 0;
 }
 
+=head3 _request
+
+  my $rsp = $self->_request($params);
+
+Given a set of query details, perform an http request and return the response
+or set an error flag.
+
+=cut
+
 sub _request {
     my ( $self, $param ) = @_;
     my $method     = $param->{method};
@@ -823,6 +827,10 @@ sub _request {
 }
 
 =head3 _validate_borrower
+
+Given a borrower cardnumber, identify the borrower and check their eligability
+to submit requests. Return an arrayref of the borrower match count followed by
+the first borrowers details.
 
 =cut
 
@@ -854,12 +862,13 @@ sub _validate_borrower {
     return ( $count, $brw );
 }
 
-=head3 _find_breeding
+=head3 _add_from_breeding
 
-  my $record = $self->_find_breeding($breedingid);
+  my $record = $self->_add_from_breeding($breedingid);
 
-Given a MARCBreedingID, we should lookup the record from the reserviour and return a 
-MARC::Record object.
+Given a MARCBreedingID, we should lookup the record from the reserviour, add it
+to the catalogue as a temporary record and return the new records biblionumber
+and the remote records biblionumber.
 
 =cut
 
@@ -886,6 +895,14 @@ sub _add_from_breeding {
     # Return the new records biblionumber and the remote records biblionumber
     return ( $biblionumber, $remote_id );
 }
+
+=head3 _set_suppression
+
+  my $result = $self->_set_suppression($record);
+
+Given a MARC::Record, set the suppression bit, return success.
+
+=cut
 
 sub _set_suppression {
     my ( $self, $record ) = @_;
