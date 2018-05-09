@@ -125,29 +125,29 @@ definition consisting of
 
 sub new {
 
-    # -> instantiate the backend
-    my ( $class, $params ) = @_;
+  # -> instantiate the backend
+  my ($class, $params) = @_;
 
-    my $self = {
+  my $self = {
 
-        # FIXME: This should be loaded from a configuration.  We should allow
-        # multiple targets.
-        targets => {
-            'KOHA DEMO' => {
-                ZID      => 6,
-                ILSDI    => 'https://demo.koha-ptfs.eu/cgi-bin/koha/ilsdi.pl',
-                user     => 'alex_library',
-                password => 'zoom1JaeC1EiJie',
-            },
-        },
-        framework => 'ILL',
-    };
-    bless( $self, $class );
-    return $self;
+    # FIXME: This should be loaded from a configuration.  We should allow
+    # multiple targets.
+    targets => {
+      'KOHA DEMO' => {
+        ZID      => 6,
+        ILSDI    => 'https://demo.koha-ptfs.eu/cgi-bin/koha/ilsdi.pl',
+        user     => 'alex_library',
+        password => 'zoom1JaeC1EiJie',
+      },
+    },
+    framework => 'ILL',
+  };
+  bless($self, $class);
+  return $self;
 }
 
 sub name {
-    return "Koha";
+  return "Koha";
 }
 
 =head3 metadata
@@ -158,14 +158,14 @@ illrequestattributes store.
 =cut
 
 sub metadata {
-    my ( $self, $request ) = @_;
-    my $attrs = $request->illrequestattributes;
-    return {
-        ID     => $attrs->find( { type => 'bib_id' } )->value,
-        Title  => $attrs->find( { type => 'title' } )->value,
-        Author => $attrs->find( { type => 'author' } )->value,
-        Target => $attrs->find( { type => 'target' } )->value,
-    };
+  my ($self, $request) = @_;
+  my $attrs = $request->illrequestattributes;
+  return {
+    ID     => $attrs->find({type => 'bib_id'})->value,
+    Title  => $attrs->find({type => 'title'})->value,
+    Author => $attrs->find({type => 'author'})->value,
+    Target => $attrs->find({type => 'target'})->value,
+  };
 }
 
 =head3 capabilities
@@ -178,13 +178,13 @@ capability is not implemented.
 =cut
 
 sub capabilities {
-    my ( $self, $name ) = @_;
-    my $capabilities = {
+  my ($self, $name) = @_;
+  my $capabilities = {
 
-        # We don't implement unmediated for now
-        # unmediated_ill => sub { $self->confirm(@_); }
-    };
-    return $capabilities->{$name};
+    # We don't implement unmediated for now
+    # unmediated_ill => sub { $self->confirm(@_); }
+  };
+  return $capabilities->{$name};
 }
 
 =head3 status_graph
@@ -192,17 +192,17 @@ sub capabilities {
 =cut
 
 sub status_graph {
-    return {
-        MIG => {
-            prev_actions   => [ 'NEW', 'REQREV', 'QUEUED', ],
-            id             => 'MIG',
-            name           => 'Backend Migration',
-            ui_method_name => 'Switch provider',
-            method         => 'migrate',
-            next_actions   => [],
-            ui_method_icon => 'fa-search',
-        },
-    };
+  return {
+    MIG => {
+      prev_actions   => ['NEW', 'REQREV', 'QUEUED',],
+      id             => 'MIG',
+      name           => 'Backend Migration',
+      ui_method_name => 'Switch provider',
+      method         => 'migrate',
+      next_actions   => [],
+      ui_method_icon => 'fa-search',
+    },
+  };
 }
 
 =head3 create
@@ -222,158 +222,152 @@ We provide no paging and only rudimentary branch & borrower validation.
 
 sub create {
 
-    # -> initial placement of the request for an ILL order
-    my ( $self, $params ) = @_;
-    my $other = $params->{other};
+  # -> initial placement of the request for an ILL order
+  my ($self, $params) = @_;
+  my $other = $params->{other};
 
-    my $stage = $other->{stage};
-    if ( !$stage || $stage eq 'init' ) {
+  my $stage = $other->{stage};
+  if (!$stage || $stage eq 'init') {
 
-        # We simply need our template .INC to produce a search form.
-        return {
-            error   => 0,
-            status  => '',
-            message => '',
-            method  => 'create',
-            stage   => 'search_form',
-            value   => $params,
-        };
+    # We simply need our template .INC to produce a search form.
+    return {
+      error   => 0,
+      status  => '',
+      message => '',
+      method  => 'create',
+      stage   => 'search_form',
+      value   => $params,
+    };
+  }
+  elsif ($stage eq 'search_form') {
+
+    # Received search query in 'other'; perform search...
+    my ($brw_count, $brw) = _validate_borrower($other->{'cardnumber'}, $stage);
+    my $result = {
+      status  => "",
+      message => "",
+      error   => 1,
+      value   => {},
+      method  => "create",
+      stage   => "init",
+    };
+    if (_fail($other->{'branchcode'})) {
+      $result->{status} = "missing_branch";
+      $result->{value}  = $params;
+      return $result;
     }
-    elsif ( $stage eq 'search_form' ) {
-
-        # Received search query in 'other'; perform search...
-        my ( $brw_count, $brw ) =
-          _validate_borrower( $other->{'cardnumber'}, $stage );
-        my $result = {
-            status  => "",
-            message => "",
-            error   => 1,
-            value   => {},
-            method  => "create",
-            stage   => "init",
-        };
-        if ( _fail( $other->{'branchcode'} ) ) {
-            $result->{status} = "missing_branch";
-            $result->{value}  = $params;
-            return $result;
-        }
-        elsif ( !Koha::Libraries->find( $other->{'branchcode'} ) ) {
-            $result->{status} = "invalid_branch";
-            $result->{value}  = $params;
-            return $result;
-        }
-        elsif ( $brw_count == 0 ) {
-            $result->{status} = "invalid_borrower";
-            $result->{value}  = $params;
-            return $result;
-        }
-        elsif ( $brw_count > 1 ) {
-
-            # We must select a specific borrower out of our options.
-            $params->{brw}   = $brw;
-            $result->{value} = $params;
-            $result->{stage} = "borrowers";
-            $result->{error} = 0;
-            return $result;
-        }
-        else {
-            # Perform the search
-            my $search = {
-                biblionumber => 0,    # required by C4::Breeding::Z3950Search
-                page => $other->{page} ? $other->{page} : 1,
-                id   => [
-                    map { $self->{targets}->{$_}->{ZID} }
-                      keys %{ $self->{targets} }
-                ],
-                isbn          => $other->{isbn},
-                issn          => $other->{issn},
-                title         => $other->{title},
-                author        => $other->{author},
-                dewey         => $other->{dewey},
-                subject       => $other->{subject},
-                lccall        => $other->{lccall},
-                controlnumber => $other->{controlnumber},
-                stdid         => $other->{stdid},
-                srchany       => $other->{srchany},
-            };
-            my $results = $self->_search($search);
-
-            # Construct the response
-            my $response = {
-                status         => 200,
-                message        => "",
-                error          => 0,
-                value          => $results,
-                method         => 'create',
-                stage          => 'search_results',
-                borrowernumber => $brw->borrowernumber,
-                cardnumber     => $other->{cardnumber},
-                branchcode     => $other->{branchcode},
-                backend        => $other->{backend},
-                query          => $search,
-                params         => $params
-            };
-            return $response;
-        }
-
+    elsif (!Koha::Libraries->find($other->{'branchcode'})) {
+      $result->{status} = "invalid_branch";
+      $result->{value}  = $params;
+      return $result;
     }
-    elsif ( $stage eq 'search_results' ) {
-        my $other = $params->{other};
+    elsif ($brw_count == 0) {
+      $result->{status} = "invalid_borrower";
+      $result->{value}  = $params;
+      return $result;
+    }
+    elsif ($brw_count > 1) {
 
-        my ( $biblionumber, $remote_id ) =
-          $self->_add_from_breeding( $other->{breedingid}, $self->{framework} );
-
-        my $request_details = {
-            target => $other->{target},
-            bib_id => $remote_id,
-            title  => $other->{title},
-            author => $other->{author},
-        };
-
-        # ...Populate Illrequest
-        my $request = $params->{request};
-        $request->borrowernumber( $other->{borrowernumber} );
-        $request->branchcode( $other->{branchcode} );
-        $request->status('NEW');
-        $request->backend( $other->{backend} );
-        $request->placed( DateTime->now );
-        $request->updated( DateTime->now );
-        $request->biblio_id($biblionumber);
-        $request->store;
-
-        # ...Populate Illrequestattributes
-        while ( my ( $type, $value ) = each %{$request_details} ) {
-            Koha::Illrequestattribute->new(
-                {
-                    illrequest_id => $request->illrequest_id,
-                    type          => $type,
-                    value         => $value,
-                }
-            )->store;
-        }
-
-        # -> create response.
-        return {
-            error   => 0,
-            status  => '',
-            message => '',
-            method  => 'create',
-            stage   => 'commit',
-            next    => 'illview',
-            value   => $request_details,
-        };
+      # We must select a specific borrower out of our options.
+      $params->{brw}   = $brw;
+      $result->{value} = $params;
+      $result->{stage} = "borrowers";
+      $result->{error} = 0;
+      return $result;
     }
     else {
-        # Invalid stage, return error.
-        return {
-            error   => 1,
-            status  => 'unknown_stage',
-            message => '',
-            method  => 'create',
-            stage   => $params->{stage},
-            value   => {},
-        };
+      # Perform the search
+      my $search = {
+        biblionumber => 0,    # required by C4::Breeding::Z3950Search
+        page => $other->{page} ? $other->{page} : 1,
+        id => [map { $self->{targets}->{$_}->{ZID} } keys %{$self->{targets}}],
+        isbn          => $other->{isbn},
+        issn          => $other->{issn},
+        title         => $other->{title},
+        author        => $other->{author},
+        dewey         => $other->{dewey},
+        subject       => $other->{subject},
+        lccall        => $other->{lccall},
+        controlnumber => $other->{controlnumber},
+        stdid         => $other->{stdid},
+        srchany       => $other->{srchany},
+      };
+      my $results = $self->_search($search);
+
+      # Construct the response
+      my $response = {
+        status         => 200,
+        message        => "",
+        error          => 0,
+        value          => $results,
+        method         => 'create',
+        stage          => 'search_results',
+        borrowernumber => $brw->borrowernumber,
+        cardnumber     => $other->{cardnumber},
+        branchcode     => $other->{branchcode},
+        backend        => $other->{backend},
+        query          => $search,
+        params         => $params
+      };
+      return $response;
     }
+
+  }
+  elsif ($stage eq 'search_results') {
+    my $other = $params->{other};
+
+    my ($biblionumber, $remote_id)
+      = $self->_add_from_breeding($other->{breedingid}, $self->{framework});
+
+    my $request_details = {
+      target => $other->{target},
+      bib_id => $remote_id,
+      title  => $other->{title},
+      author => $other->{author},
+    };
+
+    # ...Populate Illrequest
+    my $request = $params->{request};
+    $request->borrowernumber($other->{borrowernumber});
+    $request->branchcode($other->{branchcode});
+    $request->status('NEW');
+    $request->backend($other->{backend});
+    $request->placed(DateTime->now);
+    $request->updated(DateTime->now);
+    $request->biblio_id($biblionumber);
+    $request->store;
+
+    # ...Populate Illrequestattributes
+    while (my ($type, $value) = each %{$request_details}) {
+      Koha::Illrequestattribute->new({
+        illrequest_id => $request->illrequest_id,
+        type          => $type,
+        value         => $value,
+      })->store;
+    }
+
+    # -> create response.
+    return {
+      error   => 0,
+      status  => '',
+      message => '',
+      method  => 'create',
+      stage   => 'commit',
+      next    => 'illview',
+      value   => $request_details,
+    };
+  }
+  else {
+    # Invalid stage, return error.
+    return {
+      error   => 1,
+      status  => 'unknown_stage',
+      message => '',
+      method  => 'create',
+      stage   => $params->{stage},
+      value   => {},
+    };
+  }
 }
 
 =head3 migrate
@@ -383,133 +377,124 @@ Migrate a request into or out of this backend.
 =cut
 
 sub migrate {
-    my ( $self, $params ) = @_;
-    my $other = $params->{other};
+  my ($self, $params) = @_;
+  my $other = $params->{other};
 
-    my $stage = $other->{stage};
-    my $step  = $other->{step};
+  my $stage = $other->{stage};
+  my $step  = $other->{step};
 
-    # Recieve a new request from another backend and suppliment it with
-    # anything we require speficifcally for this backend.
-    if ( !$stage || $stage eq 'immigrate' ) {
+  # Recieve a new request from another backend and suppliment it with
+  # anything we require speficifcally for this backend.
+  if (!$stage || $stage eq 'immigrate') {
 
-        # Fetch original request details
-        my $original_request =
-          Koha::Illrequests->find( $other->{illrequest_id} );
+    # Fetch original request details
+    my $original_request = Koha::Illrequests->find($other->{illrequest_id});
 
-        # Initiate immigration search
-        if ( !$step || $step eq 'init' ) {
+    # Initiate immigration search
+    if (!$step || $step eq 'init') {
 
-            # Initiate search with details from last request
-            my $search = {
-                biblionumber => 0,    # required by C4::Breeding::Z3950Search
-                page => $other->{page} ? $other->{page} : 1,
-                id   => [
-                    map { $self->{targets}->{$_}->{ZID} }
-                      keys %{ $self->{targets} }
-                ],
-            };
-            my @recognised_attributes = (
-                qw/isbn issn title author dewey subject lccall controlnumber stdid srchany/
-            );
-            my $original_attributes =
-              $original_request->illrequestattributes->search(
-                { type => { '-in' => \@recognised_attributes } } );
-            my $search_attributes =
-              { map { $_->type => $_->value }
-                  ( $original_attributes->as_list ) };
-            $search = { %{$search}, %{$search_attributes} };
+      # Initiate search with details from last request
+      my $search = {
+        biblionumber => 0,    # required by C4::Breeding::Z3950Search
+        page => $other->{page} ? $other->{page} : 1,
+        id => [map { $self->{targets}->{$_}->{ZID} } keys %{$self->{targets}}],
+      };
+      my @recognised_attributes
+        = (
+        qw/isbn issn title author dewey subject lccall controlnumber stdid srchany/
+        );
+      my $original_attributes = $original_request->illrequestattributes->search(
+        {type => {'-in' => \@recognised_attributes}});
+      my $search_attributes
+        = {map { $_->type => $_->value } ($original_attributes->as_list)};
+      $search = {%{$search}, %{$search_attributes}};
 
-            # Perform a search
-            my $results = $self->_search($search);
+      # Perform a search
+      my $results = $self->_search($search);
 
-            # Construct the response
-            my $response = {
-                status        => 200,
-                message       => "",
-                error         => 0,
-                value         => $results,
-                method        => 'migrate',
-                stage         => 'immigrate',
-                step          => 'search_results',
-                illrequest_id => $other->{illrequest_id},
-                backend       => $self->name,
-                query         => $search,
-                params        => $params
-            };
-            return $response;
-        }
-
-        # Import from search results
-        elsif ( $step eq 'search_results' ) {
-            my ( $biblionumber, $remote_id ) =
-              $self->_add_from_breeding( $other->{breedingid},
-                $self->{framework} );
-
-            my $new_request = $params->{request};
-            $new_request->borrowernumber( $original_request->borrowernumber );
-            $new_request->branchcode( $original_request->branchcode );
-            $new_request->status('NEW');
-            $new_request->backend( $self->name );
-            $new_request->placed( DateTime->now );
-            $new_request->updated( DateTime->now );
-            $new_request->biblio_id($biblionumber);
-            $new_request->store;
-
-            my $request_details = {
-                target => $other->{target},
-                bib_id => $remote_id,
-                title  => $other->{title},
-                author => $other->{author},
-            };
-            $request_details->{migrated_from} =
-              $original_request->illrequest_id;
-
-            while ( my ( $type, $value ) = each %{$request_details} ) {
-                Koha::Illrequestattribute->new(
-                    {
-                        illrequest_id => $new_request->illrequest_id,
-                        type          => $type,
-                        value         => $value,
-                    }
-                )->store;
-            }
-
-            return {
-                error   => 0,
-                status  => '',
-                message => '',
-                method  => 'migrate',
-                stage   => 'commit',
-                next    => 'emigrate',
-                value   => $params,
-            };
-        }
+      # Construct the response
+      my $response = {
+        status        => 200,
+        message       => "",
+        error         => 0,
+        value         => $results,
+        method        => 'migrate',
+        stage         => 'immigrate',
+        step          => 'search_results',
+        illrequest_id => $other->{illrequest_id},
+        backend       => $self->name,
+        query         => $search,
+        params        => $params
+      };
+      return $response;
     }
 
-    # Cleanup any outstanding work and close the request.
-    elsif ( $stage eq 'emigrate' ) {
-        my $request = $params->{request};
+    # Import from search results
+    elsif ($step eq 'search_results') {
+      my ($biblionumber, $remote_id)
+        = $self->_add_from_breeding($other->{breedingid}, $self->{framework});
 
-        # Just cancel the original request now it's been migrated away
-        $request->status("REQREV");
-        $request->orderid(undef);
-        $request->store;
+      my $new_request = $params->{request};
+      $new_request->borrowernumber($original_request->borrowernumber);
+      $new_request->branchcode($original_request->branchcode);
+      $new_request->status('NEW');
+      $new_request->backend($self->name);
+      $new_request->placed(DateTime->now);
+      $new_request->updated(DateTime->now);
+      $new_request->biblio_id($biblionumber);
+      $new_request->store;
 
-        # Clean up the temporary bib record for the migrated request
-        #if ( my $biblio = $request->biblio ) {
-        #    DeleteBiblio( $biblio->biblionumber );
-        #}
+      my $request_details = {
+        target => $other->{target},
+        bib_id => $remote_id,
+        title  => $other->{title},
+        author => $other->{author},
+      };
+      $request_details->{migrated_from} = $original_request->illrequest_id;
 
-        return {
-            error   => 0,
-            status  => '',
-            message => '',
-            method  => 'migrate',
-            stage   => 'commit',
-            value   => $params,
-        };
+      while (my ($type, $value) = each %{$request_details}) {
+        Koha::Illrequestattribute->new({
+          illrequest_id => $new_request->illrequest_id,
+          type          => $type,
+          value         => $value,
+        })->store;
+      }
+
+      return {
+        error   => 0,
+        status  => '',
+        message => '',
+        method  => 'migrate',
+        stage   => 'commit',
+        next    => 'emigrate',
+        value   => $params,
+      };
     }
+  }
+
+  # Cleanup any outstanding work and close the request.
+  elsif ($stage eq 'emigrate') {
+    my $request = $params->{request};
+
+    # Just cancel the original request now it's been migrated away
+    $request->status("REQREV");
+    $request->orderid(undef);
+    $request->store;
+
+    # Clean up the temporary bib record for the migrated request
+    #if ( my $biblio = $request->biblio ) {
+    #    DeleteBiblio( $biblio->biblionumber );
+    #}
+
+    return {
+      error   => 0,
+      status  => '',
+      message => '',
+      method  => 'migrate',
+      stage   => 'commit',
+      value   => $params,
+    };
+  }
 }
 
 =head3 confirm
@@ -530,133 +515,132 @@ using templates.
 
 sub confirm {
 
-    # -> confirm placement of the ILL order
-    my ( $self, $params ) = @_;
+  # -> confirm placement of the ILL order
+  my ($self, $params) = @_;
 
-    # Turn Illrequestattributes into a plain hashref
-    my $value      = {};
-    my $attributes = $params->{request}->illrequestattributes;
-    foreach my $attr ( @{ $attributes->as_list } ) {
-        $value->{ $attr->type } = $attr->value;
-    }
-    my $target = $self->{targets}->{ $value->{target} };
+  # Turn Illrequestattributes into a plain hashref
+  my $value      = {};
+  my $attributes = $params->{request}->illrequestattributes;
+  foreach my $attr (@{$attributes->as_list}) {
+    $value->{$attr->type} = $attr->value;
+  }
+  my $target = $self->{targets}->{$value->{target}};
 
-    # Submit request to backend...
+  # Submit request to backend...
 
-    # Authentication:
-    my $url       = URI->new( $target->{ILSDI} );
-    my $key_pairs = {
-        'service'  => 'AuthenticatePatron',
-        'username' => $target->{user},
-        'password' => $target->{password},
-    };
-    $url->query_form($key_pairs);
-    my $rsp = $self->_request( { method => 'GET', url => $url } );
+  # Authentication:
+  my $url       = URI->new($target->{ILSDI});
+  my $key_pairs = {
+    'service'  => 'AuthenticatePatron',
+    'username' => $target->{user},
+    'password' => $target->{password},
+  };
+  $url->query_form($key_pairs);
+  my $rsp = $self->_request({method => 'GET', url => $url});
 
-    # Catch LWP Errors
-    if ( $self->{error} ) {
-        return {
-            error   => 1,
-            status  => '',
-            message => "ILDI Service Error: Request - $url, "
-              . "Status - $self->{error}->{status}, "
-              . "Content - $self->{error}->{content}, $url",
-            method => 'confirm',
-            stage  => 'confirm',
-            next   => '',
-            value  => $value
-        };
-    }
-
-    my $doc = XML::LibXML->load_xml( string => $rsp );
-
-    # Catch AuthenticatePatron Errors
-    my $code_query = "//AuthenticatePatron/code/text()";
-    my $code =
-      $doc->findnodes($code_query)
-      ? ${ $doc->findnodes($code_query) }[0]->data
-      : undef;
+  # Catch LWP Errors
+  if ($self->{error}) {
     return {
-        error   => 1,
-        status  => '',
-        message => "Service Authentication Error: $code",
-        method  => 'confirm',
-        stage   => 'confirm',
-        next    => '',
-        value   => $value
-      }
-      if defined($code);
-
-    # Stash the authenticated service user id
-    my $id_query = "//AuthenticatePatron/id/text()";
-    my $id       = ${ $doc->findnodes($id_query) }[0]->data;
-
-    # Place the request
-    $url       = URI->new( $target->{ILSDI} );
-    $key_pairs = {
-        'service'          => 'HoldTitle',
-        'patron_id'        => $id,
-        'bib_id'           => $value->{bib_id},
-        'request_location' => '127.0.0.1',
+      error   => 1,
+      status  => '',
+      message => "ILDI Service Error: Request - $url, "
+        . "Status - $self->{error}->{status}, "
+        . "Content - $self->{error}->{content}, $url",
+      method => 'confirm',
+      stage  => 'confirm',
+      next   => '',
+      value  => $value
     };
-    $url->query_form($key_pairs);
-    $rsp = $self->_request( { method => 'GET', url => $url } );
+  }
 
-    # Catch LWP Errors
-    if ( $self->{error} ) {
-        return {
-            error   => 1,
-            status  => '',
-            message => "ILDI Service Error: Request - $url, "
-              . "Status - $self->{error}->{status}, "
-              . "Content - $self->{error}->{content}, $url",
-            method => 'confirm',
-            stage  => 'confirm',
-            next   => '',
-            value  => $value
-        };
+  my $doc = XML::LibXML->load_xml(string => $rsp);
+
+  # Catch AuthenticatePatron Errors
+  my $code_query = "//AuthenticatePatron/code/text()";
+  my $code
+    = $doc->findnodes($code_query)
+    ? ${$doc->findnodes($code_query)}[0]->data
+    : undef;
+  return {
+    error   => 1,
+    status  => '',
+    message => "Service Authentication Error: $code",
+    method  => 'confirm',
+    stage   => 'confirm',
+    next    => '',
+    value   => $value
     }
+    if defined($code);
 
-    $doc = XML::LibXML->load_xml( string => $rsp );
+  # Stash the authenticated service user id
+  my $id_query = "//AuthenticatePatron/id/text()";
+  my $id       = ${$doc->findnodes($id_query)}[0]->data;
 
-    # Catch HoldTitle Errors
-    $code_query = "//HoldTitle/code/text()";
-    $code =
-      $doc->findnodes($code_query)
-      ? ${ $doc->findnodes($code_query) }[0]->data
-      : undef;
+  # Place the request
+  $url       = URI->new($target->{ILSDI});
+  $key_pairs = {
+    'service'          => 'HoldTitle',
+    'patron_id'        => $id,
+    'bib_id'           => $value->{bib_id},
+    'request_location' => '127.0.0.1',
+  };
+  $url->query_form($key_pairs);
+  $rsp = $self->_request({method => 'GET', url => $url});
+
+  # Catch LWP Errors
+  if ($self->{error}) {
     return {
-        error   => 1,
-        status  => '',
-        message => "Service Request Error: $code",
-        method  => 'confirm',
-        stage   => 'confirm',
-        next    => '',
-        value   => $value
-      }
-      if defined($code);
-
-    # Stash the hold request response
-    my $pickup_query = "//HoldTitle/pickup_location/text()";
-    die( "Placing hold failed:", $rsp )
-      if !${ $doc->findnodes($pickup_query) }[0];
-
-    my $request = $params->{request};
-    $request->cost("0 GBP");
-    $request->orderid( $value->{bib_id} );
-    $request->status("REQ");
-    $request->store;
-
-    # ...then return our result:
-    return {
-        error   => 0,
-        status  => '',
-        message => '',
-        method  => 'confirm',
-        stage   => 'commit',
-        next    => 'illview',
-        value   => $value,
+      error   => 1,
+      status  => '',
+      message => "ILDI Service Error: Request - $url, "
+        . "Status - $self->{error}->{status}, "
+        . "Content - $self->{error}->{content}, $url",
+      method => 'confirm',
+      stage  => 'confirm',
+      next   => '',
+      value  => $value
     };
+  }
+
+  $doc = XML::LibXML->load_xml(string => $rsp);
+
+  # Catch HoldTitle Errors
+  $code_query = "//HoldTitle/code/text()";
+  $code
+    = $doc->findnodes($code_query)
+    ? ${$doc->findnodes($code_query)}[0]->data
+    : undef;
+  return {
+    error   => 1,
+    status  => '',
+    message => "Service Request Error: $code",
+    method  => 'confirm',
+    stage   => 'confirm',
+    next    => '',
+    value   => $value
+    }
+    if defined($code);
+
+  # Stash the hold request response
+  my $pickup_query = "//HoldTitle/pickup_location/text()";
+  die("Placing hold failed:", $rsp) if !${$doc->findnodes($pickup_query)}[0];
+
+  my $request = $params->{request};
+  $request->cost("0 GBP");
+  $request->orderid($value->{bib_id});
+  $request->status("REQ");
+  $request->store;
+
+  # ...then return our result:
+  return {
+    error   => 0,
+    status  => '',
+    message => '',
+    method  => 'confirm',
+    stage   => 'commit',
+    next    => 'illview',
+    value   => $value,
+  };
 }
 
 =head3 renew
@@ -676,16 +660,16 @@ Illrequest.  $other may be supplied using templates.
 
 sub renew {
 
-    # -> request a currently borrowed ILL be renewed in the backend
-    my ( $self, $params ) = @_;
-    return {
-        error   => 1,
-        status  => 404,
-        message => "Not Implemented",
-        method  => 'renew',
-        stage   => 'fake',
-        value   => {},
-    };
+  # -> request a currently borrowed ILL be renewed in the backend
+  my ($self, $params) = @_;
+  return {
+    error   => 1,
+    status  => 404,
+    message => "Not Implemented",
+    method  => 'renew',
+    stage   => 'fake',
+    value   => {},
+  };
 }
 
 =head3 cancel
@@ -704,16 +688,16 @@ Illrequest.  $other may be supplied using templates.
 
 sub cancel {
 
-    # -> request an already 'confirm'ed ILL order be cancelled
-    my ( $self, $params ) = @_;
-    return {
-        error   => 1,
-        status  => 404,
-        message => "Not Implemented",
-        method  => 'cancel',
-        stage   => 'fake',
-        value   => {},
-    };
+  # -> request an already 'confirm'ed ILL order be cancelled
+  my ($self, $params) = @_;
+  return {
+    error   => 1,
+    status  => 404,
+    message => "Not Implemented",
+    method  => 'cancel',
+    stage   => 'fake',
+    value   => {},
+  };
 }
 
 =head3 status
@@ -732,16 +716,16 @@ Illrequest.  $other may be supplied using templates.
 
 sub status {
 
-    # -> request the current status of a confirmed ILL order
-    my ( $self, $params ) = @_;
-    return {
-        error   => 1,
-        status  => 404,
-        message => "Not Implemented",
-        method  => 'status',
-        stage   => 'fake',
-        value   => {},
-    };
+  # -> request the current status of a confirmed ILL order
+  my ($self, $params) = @_;
+  return {
+    error   => 1,
+    status  => 404,
+    message => "Not Implemented",
+    method  => 'status',
+    stage   => 'fake',
+    value   => {},
+  };
 }
 
 #### Helpers
@@ -756,26 +740,26 @@ targets and return the results (and add the results to the reserviour).
 =cut
 
 sub _search {
-    my ( $self, $search ) = @_;
+  my ($self, $search) = @_;
 
-    # Mock C4::Template object used for passing parameters
-    # (Z3950Search compatabilty shim)
-    my $mock = MockTemplate->new;
-    Z3950Search( $search, $mock );
+  # Mock C4::Template object used for passing parameters
+  # (Z3950Search compatabilty shim)
+  my $mock = MockTemplate->new;
+  Z3950Search($search, $mock);
 
-    my $response = {
-        numberpending   => $mock->param('numberpending'),
-        current_page    => $mock->param('current_page'),
-        total_pages     => $mock->param('total_pages'),
-        show_nextbutton => $mock->param('show_nextbutton'),
-        show_prevbutton => $mock->param('show_prevbutton'),
-        results         => $mock->param('breeding_loop'),
-        servers         => $mock->param('servers'),
-        errors          => $mock->param('errconn')
-    };
+  my $response = {
+    numberpending   => $mock->param('numberpending'),
+    current_page    => $mock->param('current_page'),
+    total_pages     => $mock->param('total_pages'),
+    show_nextbutton => $mock->param('show_nextbutton'),
+    show_prevbutton => $mock->param('show_prevbutton'),
+    results         => $mock->param('breeding_loop'),
+    servers         => $mock->param('servers'),
+    errors          => $mock->param('errconn')
+  };
 
-    # Return search results
-    return $response;
+  # Return search results
+  return $response;
 }
 
 =head3 _fail
@@ -783,11 +767,11 @@ sub _search {
 =cut
 
 sub _fail {
-    my @values = @_;
-    foreach my $val (@values) {
-        return 1 if ( !$val or $val eq '' );
-    }
-    return 0;
+  my @values = @_;
+  foreach my $val (@values) {
+    return 1 if (!$val or $val eq '');
+  }
+  return 0;
 }
 
 =head3 _request
@@ -800,30 +784,27 @@ or set an error flag.
 =cut
 
 sub _request {
-    my ( $self, $param ) = @_;
-    my $method     = $param->{method};
-    my $url        = $param->{url};
-    my $content    = $param->{content};
-    my $additional = $param->{additional};
+  my ($self, $param) = @_;
+  my $method     = $param->{method};
+  my $url        = $param->{url};
+  my $content    = $param->{content};
+  my $additional = $param->{additional};
 
-    my $req = HTTP::Request->new( $method => $url );
+  my $req = HTTP::Request->new($method => $url);
 
-    # add content if specified
-    if ($content) {
-        $req->content($content);
-        $req->header( 'Content-Type' => 'text/xml' );
-    }
+  # add content if specified
+  if ($content) {
+    $req->content($content);
+    $req->header('Content-Type' => 'text/xml');
+  }
 
-    my $ua  = LWP::UserAgent->new;
-    my $res = $ua->request($req);
-    if ( $res->is_success ) {
-        return $res->content;
-    }
-    $self->{error} = {
-        status  => $res->status_line,
-        content => $res->content
-    };
-    return;
+  my $ua  = LWP::UserAgent->new;
+  my $res = $ua->request($req);
+  if ($res->is_success) {
+    return $res->content;
+  }
+  $self->{error} = {status => $res->status_line, content => $res->content};
+  return;
 }
 
 =head3 _validate_borrower
@@ -836,30 +817,30 @@ the first borrowers details.
 
 sub _validate_borrower {
 
-    # Perform cardnumber search.  If no results, perform surname search.
-    # Return ( 0, undef ), ( 1, $brw ) or ( n, $brws )
-    my ( $input, $action ) = @_;
-    my $patrons = Koha::Patrons->new;
-    my ( $count, $brw );
-    my $query = { cardnumber => $input };
-    $query = { borrowernumber => $input } if ( $action eq 'search_cont' );
+  # Perform cardnumber search.  If no results, perform surname search.
+  # Return ( 0, undef ), ( 1, $brw ) or ( n, $brws )
+  my ($input, $action) = @_;
+  my $patrons = Koha::Patrons->new;
+  my ($count, $brw);
+  my $query = {cardnumber => $input};
+  $query = {borrowernumber => $input} if ($action eq 'search_cont');
 
-    my $brws = $patrons->search($query);
+  my $brws = $patrons->search($query);
+  $count = $brws->count;
+  my @criteria = qw/ surname firstname end /;
+  while ($count == 0) {
+    my $criterium = shift @criteria;
+    return (0, undef) if ("end" eq $criterium);
+    $brws = $patrons->search({$criterium => $input});
     $count = $brws->count;
-    my @criteria = qw/ surname firstname end /;
-    while ( $count == 0 ) {
-        my $criterium = shift @criteria;
-        return ( 0, undef ) if ( "end" eq $criterium );
-        $brws = $patrons->search( { $criterium => $input } );
-        $count = $brws->count;
-    }
-    if ( $count == 1 ) {
-        $brw = $brws->next;
-    }
-    else {
-        $brw = $brws;    # found multiple results
-    }
-    return ( $count, $brw );
+  }
+  if ($count == 1) {
+    $brw = $brws->next;
+  }
+  else {
+    $brw = $brws;    # found multiple results
+  }
+  return ($count, $brw);
 }
 
 =head3 _add_from_breeding
@@ -873,27 +854,27 @@ and the remote records biblionumber.
 =cut
 
 sub _add_from_breeding {
-    my ( $self, $breedingid, $framework ) = @_;
+  my ($self, $breedingid, $framework) = @_;
 
-    # Fetch record from reserviour
-    my ( $marc, $encoding ) = GetImportRecordMarc($breedingid);
-    my $record = MARC::Record->new_from_usmarc($marc);
+  # Fetch record from reserviour
+  my ($marc, $encoding) = GetImportRecordMarc($breedingid);
+  my $record = MARC::Record->new_from_usmarc($marc);
 
-    # Stash the remote biblionumber
-    my $remote_id = $record->field('999')->subfield('c');
+  # Stash the remote biblionumber
+  my $remote_id = $record->field('999')->subfield('c');
 
-    # Remove the remote biblionumbers
-    my @biblionumbers = $record->field('999');
-    $record->delete_field(@biblionumbers);
+  # Remove the remote biblionumbers
+  my @biblionumbers = $record->field('999');
+  $record->delete_field(@biblionumbers);
 
-    # Set the record to suppressed
-    $self->_set_suppression($record);
+  # Set the record to suppressed
+  $self->_set_suppression($record);
 
-    # Store the record
-    my $biblionumber = AddBiblio( $record, $framework );
+  # Store the record
+  my $biblionumber = AddBiblio($record, $framework);
 
-    # Return the new records biblionumber and the remote records biblionumber
-    return ( $biblionumber, $remote_id );
+  # Return the new records biblionumber and the remote records biblionumber
+  return ($biblionumber, $remote_id);
 }
 
 =head3 _set_suppression
@@ -905,19 +886,19 @@ Given a MARC::Record, set the suppression bit, return success.
 =cut
 
 sub _set_suppression {
-    my ( $self, $record ) = @_;
+  my ($self, $record) = @_;
 
-    my $field942 = $record->field('942');
+  my $field942 = $record->field('942');
 
-    # Set Supression (942)
-    if ( defined $field942 ) {
-        $field942->update( n => '1' );
-    }
-    else {
-        my $new942 = MARC::Field->new( '942', '', '', n => '1' );
-        $record->insert_fields_ordered($new942);
-    }
-    return 1;
+  # Set Supression (942)
+  if (defined $field942) {
+    $field942->update(n => '1');
+  }
+  else {
+    my $new942 = MARC::Field->new('942', '', '', n => '1');
+    $record->insert_fields_ordered($new942);
+  }
+  return 1;
 }
 
 =head1 AUTHORS
@@ -933,42 +914,41 @@ Martin Renvoize <martin.renvoize@ptfs-europe.com>
 
 {
 
-    package MockTemplate;
+  package MockTemplate;
 
-    use base qw(Class::Accessor);
-    __PACKAGE__->mk_accessors("vars");
+  use base qw(Class::Accessor);
+  __PACKAGE__->mk_accessors("vars");
 
-    sub new {
-        my $class = shift;
-        my $self = { VARS => {} };
-        bless $self, $class;
+  sub new {
+    my $class = shift;
+    my $self = {VARS => {}};
+    bless $self, $class;
+  }
+
+  sub param {
+    my $self = shift;
+
+    # Getter
+    if (scalar @_ == 1) {
+      my $key = shift @_;
+      return $self->{VARS}->{$key};
     }
 
-    sub param {
-        my $self = shift;
+    # Setter
+    while (@_) {
+      my $key = shift;
+      my $val = shift;
 
-        # Getter
-        if ( scalar @_ == 1 ) {
-            my $key = shift @_;
-            return $self->{VARS}->{$key};
-        }
-
-        # Setter
-        while (@_) {
-            my $key = shift;
-            my $val = shift;
-
-            if    ( ref($val) eq 'ARRAY' && !scalar @$val ) { $val = undef; }
-            elsif ( ref($val) eq 'HASH'  && !scalar %$val ) { $val = undef; }
-            if    ($key) {
-                $self->{VARS}->{$key} = $val;
-            }
-            else {
-                warn
-"Problem = a value of $val has been passed to param without key";
-            }
-        }
+      if    (ref($val) eq 'ARRAY' && !scalar @$val) { $val = undef; }
+      elsif (ref($val) eq 'HASH'  && !scalar %$val) { $val = undef; }
+      if    ($key) {
+        $self->{VARS}->{$key} = $val;
+      }
+      else {
+        warn "Problem = a value of $val has been passed to param without key";
+      }
     }
+  }
 }
 
 1;
