@@ -865,7 +865,11 @@ sub _add_from_breeding {
 
   # Remove the remote biblionumbers
   my @biblionumbers = $record->field('999');
-  $record->delete_field(@biblionumbers);
+  $record->delete_fields(@biblionumbers);
+
+  # Remove the remote holdings
+  my @holdings = $record->field('952');
+  $record->delete_fields(@holdings);
 
   # Set the record to suppressed
   $self->_set_suppression($record);
