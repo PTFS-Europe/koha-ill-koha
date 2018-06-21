@@ -15,3 +15,7 @@ The version of the backend you require depends on the version of Koha you are us
 * Clone the repository into this directory, so you will end up with `Koha/Illbackends/koha-ill-koha`
 * In the `koha-ill-koha` directory switch to the branch you wish to use
 * Activate ILL by enabling the `ILLModule` system preference
+
+# Caveats
+
+* The current implimentation requires some inline configuration to be done in the Base.pm file. These will be moved into a config screen or file in due course.
