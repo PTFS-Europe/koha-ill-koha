@@ -1,0 +1,55 @@
+#+TITLE: NOTES
+#+AUTHOR: Alex Sassmannshausen
+#+EMAIL: alex.sassmannshausen@gmail.com
+
+* Notes
+
+  - Aim is to provide a connector that can search remote Koha
+    systems, ideally grouped, and place requests against any of
+    those.
+
+** Search
+
+   - The search calls are implemented using Koha SRU server until
+     REST APIs are available.  ILS-DI does not allow for searches.
+     (example calls in [[file:sru-examples.client][rest file]])
+
+** Place hold
+
+   - This is implemented using the ILS-DI interface using a
+     specialised patron at the server
+   - We will need to perform two calls for this:
+     - authentication
+     - place hold
+     - (example calls in [[file:sru-examples.client][rest file]])
+   - We will authentication, limit checking, etc to the supplying
+     server for now.
+     - This means we have collective limits on number of ILLs for now
+
+* Resources
+
+  - I can use the PTFS demo server at https://demo{staff}.koha-ptfs.eu
+    - It has ILS-DI enabled at https://demo.koha-ptfs.eu/cgi-bin/koha/ilsdi.pl
+    - And SRU at http://demo.koha-ptfs.eu:9998/biblios
+    - I have a test user, alex_library for ils-di hold requests
+      - password in shroud, under ptfs.demo.koha-ptfs.eu.koha-ill-backend
+
+* Backend dependencies
+
+  - Catmandu::Importer::SRU
+
+* Plan
+
+** DONE [#A] Setup dev environment
+   - Using Kohadevbox
+   - Standard creation
+   - Then copy (not symlink) Illbackends into ~/kohaclone/Koha
+   - Created ILLLIBS organizational patron
+   - Then edit koha-conf.xml at echo $KOHA_CONF
+     - Paste ILL config section (copied from ~/kohaclone/etc/koha-conf.xml)
+     - Edit Illbackends dir path
+   - Enabled ILL module
+
+** DONE [#A] Create Search interface
+
+** DONE [#A] Create Request interface
