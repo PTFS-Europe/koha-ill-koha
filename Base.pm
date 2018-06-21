@@ -134,10 +134,10 @@ sub new {
     # multiple targets.
     targets => {
       'KOHA DEMO' => {
-        ZID      => 6,
-        ILSDI    => 'https://demo.koha-ptfs.eu/cgi-bin/koha/ilsdi.pl',
-        user     => 'alex_library',
-        password => 'zoom1JaeC1EiJie',
+        ZID      => 6, # ID of remote koha instance as configured as a z3950 target
+        ILSDI    => 'https://koha-instance.com/cgi-bin/koha/ilsdi.pl',
+        user     => 'remote_koha_ill_username',
+        password => 'remote_koha_ill_userpassword',
       },
     },
     framework => 'ILL',
