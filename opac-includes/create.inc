@@ -36,8 +36,8 @@
                 <li>
                     <label class="required" for="medium">Request type: </label>
                     <select class="required" required="required" id="medium" name="medium">
-                        [% FOREACH medium IN media %]
-                            <option value="[% medium %]">[% medium %]</option>
+                        [% FOREACH type IN types %]
+                            <option value="[% type %]">[% type %]</option>
                         [% END %]
                     </select>
                     <span class="required">Required</span>
