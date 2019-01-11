@@ -25,7 +25,6 @@ use Koha::Patrons;
 use LWP::UserAgent;
 use URI;
 use URI::Escape;
-use Catmandu::Importer::SRU;
 use Try::Tiny;
 
 # Modules imminently being deprecated
@@ -104,7 +103,7 @@ The backend has the notion of targets, each of which is a Koha instance
 definition consisting of
   {
     $name => {
-      SRU => 'sru_base_uri',
+      ZID => 'id_of_koha_z_target',
       ILSDI => 'ilsdi_base_uri',
       user => 'remote_user_name',
       password => 'remote_password',
@@ -183,6 +182,8 @@ sub capabilities {
 
     # We don't implement unmediated for now
     # unmediated_ill => sub { $self->confirm(@_); }
+
+    migrate => sub { $self->migrate(@_); }
   };
   return $capabilities->{$name};
 }
@@ -474,7 +475,10 @@ sub migrate {
 
   # Cleanup any outstanding work and close the request.
   elsif ($stage eq 'emigrate') {
-    my $request = $params->{request};
+    my $new_request = $params->{request};
+    my $from_id = $new_request->illrequestattributes->find(
+        { type => 'migrated_from' } )->value;
+    my $request     = Koha::Illrequests->find($from_id);
 
     # Just cancel the original request now it's been migrated away
     $request->status("REQREV");
@@ -492,6 +496,7 @@ sub migrate {
       message => '',
       method  => 'migrate',
       stage   => 'commit',
+      next    => 'illview',
       value   => $params,
     };
   }
