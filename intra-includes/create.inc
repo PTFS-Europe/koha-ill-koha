@@ -44,7 +44,7 @@
             <legend>Borrower Options</legend>
             <ol>
                 <li>
-                    <label class="required" for="cardnumber">Card number: </label>
+                    <label class="required" for="cardnumber">Card number, username or surname: </label>
                     <input class="required" required="required" type="text" name="cardnumber" value="" />
                     <span class="required">Required</span>
                 </li>
