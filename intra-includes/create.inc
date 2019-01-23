@@ -122,6 +122,47 @@
     <p>We have no results</p>
   [% END %]
 
+[% ELSIF whole.stage == "borrowers" %]
+<!-- We need to clarify the borrower that has been requested. -->
+<h2>Borrower selection</h2>
+<form method="POST" action=[% here %]>
+  <fieldset class="rows">
+    <legend>Available borrowers for surname [% surname %]</legend>
+    <input name="stage" id="stage" value="search_form" type="hidden"/>
+    <input name="method" id="method" value="create" type="hidden"/>
+    <input name="backend" id="backend" value="[% whole.value.other.backend %]" type="hidden"/> 
+    <input name="op" id="op" value="[% whole.value.other.op %]" type="hidden"/>
+    <input name="branchcode" id="branchcode" value="[% whole.value.other.branchcode %]" type="hidden"/>
+    <input name="isbn" id="isbn" value="[% whole.value.other.isbn %]" type="hidden"/>
+    <input name="issn" id="issn" value="[% whole.value.other.issn %]" type="hidden"/>
+    <input name="title" id="title" value="[% whole.value.other.title %]" type="hidden"/>
+    <input name="author" id="author" value="[% whole.value.other.author %]" type="hidden"/>
+    [% FOREACH opt IN whole.value %]
+    [% IF opt.key == "brw" %]
+    <ol>
+      <li>
+        <label class="required" for="brw">Borrower</label>
+        <select name="cardnumber" id="cardnumber">
+          <option value=""></option>
+          [% FOREACH brw IN opt.value %]
+          <option value="[% brw.cardnumber %]">
+            [% brw.firstname %] [% brw.surname %] ([% brw.cardnumber %])
+          </option>
+          [% END %]
+        </select>
+      </li>
+    </ol>
+    [% ELSE %]
+    <input name="[% opt.key %]" id="[% opt.key %]" value="[% opt.value %]" type="hidden"/>
+    [% END %]
+    [% END %]
+  </fieldset>
+  <fieldset class="action">
+    <input type="submit" value="Select"/>
+    <a class="cancel" href=[% parent %]>Cancel</a>
+  </fieldset>
+</form>
+
 [% ELSE %]
     <p>We encountered an unexpected situation</p>
 
