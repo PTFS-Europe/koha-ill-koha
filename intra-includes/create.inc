@@ -137,6 +137,7 @@
     <input name="issn" id="issn" value="[% whole.value.other.issn %]" type="hidden"/>
     <input name="title" id="title" value="[% whole.value.other.title %]" type="hidden"/>
     <input name="author" id="author" value="[% whole.value.other.author %]" type="hidden"/>
+    <input name="srchany" id="srchany" value="[% whole.value.other.srchany %]" type="hidden"/>
     [% FOREACH opt IN whole.value %]
     [% IF opt.key == "brw" %]
     <ol>
