@@ -159,11 +159,15 @@ illrequestattributes store.
 sub metadata {
   my ($self, $request) = @_;
   my $attrs = $request->illrequestattributes;
+  my $id = scalar $attrs->find({type => 'bib_id'});
+  my $title = scalar $attrs->find({type => 'title'});
+  my $author = scalar $attrs->find({type => 'author'});
+  my $target = scalar $attrs->find({type => 'target'});
   return {
-    ID     => $attrs->find({type => 'bib_id'})->value,
-    Title  => $attrs->find({type => 'title'})->value,
-    Author => $attrs->find({type => 'author'})->value,
-    Target => $attrs->find({type => 'target'})->value,
+    ID     => $id ? $id->value : undef,
+    Title  => $title ? $title->value : undef,
+    Author => $author ? $author->value : undef,
+    Target => $target ? $target->value : undef
   };
 }
 
