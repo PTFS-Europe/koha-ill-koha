@@ -1,0 +1,40 @@
+[% INCLUDE 'doc-head-open.inc' %]
+ <title>Koha &rsaquo; ILL plugin Koha &lt;-&gt; Koha &rsaquo; Configuration</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body>
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+
+<div id="breadcrumbs">
+    <a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo;
+    <a href="?class=[% CLASS %]&method=configure">ILL plugin Koha &lt;-&gt; Koha</a> &rsaquo;
+    Configuration
+</div>
+
+<div id="doc3" class="yui-t2">
+  <div id="yui-main">
+    <h2>ILL plugin Koha &lt;-&gt; Koha</h2>
+    <br/>
+      <form method="post">
+        <input type="hidden" name="class"  value="[% CLASS %]"/>
+        <input type="hidden" name="method" value="configure"/>
+        <input type="hidden" name="step"   value="configure"/>
+        <input type="hidden" name="save"   value="1"/>
+        <div class="input-group">
+          <span class="input-group-addon" id="configuration_label">Configuration</span>
+          <textarea rows="30"
+                    columns="100"
+                    class="form-control"
+                    aria-describedby="configuration_label"
+                    name="configuration" id="configuration">[%- configuration -%]</textarea>
+        </div>
+        <br/>
+        <button type="submit" value="Save" class="btn btn-default" type="button">Save</button>
+      </form>
+  </div>
+  <div class="yui-b">
+    <div id="navmenu">&nbsp;</div>
+  </div>
+
+[% INCLUDE 'intranet-bottom.inc' %]
