@@ -1,0 +1,32 @@
+{
+  "name": "koha-plugin-ill-koha",
+  "version": "19.05.00",
+  "previous_version": "2.0.7",
+  "description": "ILL plugin Koha <-> Koha",
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-cli": "^1.2.2",
+    "gulp-github-release": "^1.1.5",
+    "gulp-run": "^1.7.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "kpz": "echo -n ${npm_package_name}-v${npm_package_version}.kpz",
+    "name": "echo -n ${npm_package_name}"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/koha-community/plugins/koha-plugin-ill-koha.git"
+  },
+  "author": "Koha Community <koha-devel@lists.koha-community.org>",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://gitlab.com/koha-community/plugins/koha-plugin-ill-koha/issues"
+  },
+  "homepage": "https://gitlab.com/koha-community/plugins/koha-plugin-ill-koha#readme",
+  "dependencies": {
+    "datetime": "0.0.3",
+    "jsonfile": "^5.0.0",
+    "node-datetime": "^2.0.0"
+  }
+}
