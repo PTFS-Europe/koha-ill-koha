@@ -27,6 +27,8 @@ use URI;
 use URI::Escape;
 use Try::Tiny;
 
+use Koha::Plugin::Org::KC::ILL::Koha;
+
 # Modules imminently being deprecated
 use C4::Biblio qw( AddBiblio );
 use C4::Breeding qw( Z3950Search );
@@ -127,19 +129,17 @@ sub new {
   # -> instantiate the backend
   my ($class, $params) = @_;
 
-  my $self = {
+  my $plugin = Koha::Plugin::Org::KC::ILL::Koha->new;
 
-    # FIXME: This should be loaded from a configuration.  We should allow
-    # multiple targets.
-    targets => {
-      'KOHA DEMO' => {
-        ZID      => 6, # ID of remote koha instance as configured as a z3950 target
-        ILSDI    => 'https://koha-instance.com/cgi-bin/koha/ilsdi.pl',
-        user     => 'remote_koha_ill_username',
-        password => 'remote_koha_ill_userpassword',
-      },
-    },
-    framework => 'ILL',
+  # TODO: Check configuration sanity and bailout if required
+  my $configuration = $plugin->configuration;
+  my $targets   = $configuration->{targets};
+  my $framework = (defined $configuration->{framework}) ? $configuration->{framework} : 'ILL';
+
+  my $self = {
+    targets   => $targets,
+    framework => $framework,
+    plugin    => $plugin
   };
   bless($self, $class);
   return $self;
