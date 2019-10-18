@@ -17,6 +17,22 @@ The version of the backend you require depends on the version of Koha you are us
 * Rename the `koha-ill-koha` directory to `Koha`
 * Activate ILL by enabling the `ILLModule` system preference
 
-# Caveats
+## Configuration
 
-* The current implimentation requires some inline configuration to be done in the Base.pm file. These will be moved into a config screen or file in due course.
+The plugin configuration is an HTML text area in which a _YAML_ structure is pasted. The available options
+are maintained on this document. Example:
+
+```
+targets:
+  KOHA_1:
+    ZID: 6   # ID of remote koha instance as configured as a z3950 target
+    ILSDI: https://koha-instance-1.com/cgi-bin/koha/ilsdi.pl
+    user: remote_koha_ill_username
+    password: remote_koha_ill_userpassword
+  KOHA_2:
+    ZID: 7   # ID of remote koha instance as configured as a z3950 target
+    ILSDI: https://koha-instance-2.com/cgi-bin/koha/ilsdi.pl
+    user: remote_koha_ill_username
+    password: remote_koha_ill_userpassword
+framework: ILL
+```
